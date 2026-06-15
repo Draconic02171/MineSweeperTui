@@ -256,7 +256,7 @@ func main() {
 			case 'e':
 				{
 
-					if FieldBlock.Selected == true {
+					if FieldBlock.Checked == true {
 						break // if its already reveal then, you cant mark
 					}
 
