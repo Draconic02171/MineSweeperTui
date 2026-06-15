@@ -12,7 +12,7 @@ import (
 
 const Height uint8 = 16
 const Width uint8 = 32
-const MaxBomb uint8 = 1
+const MaxBomb uint8 = 32
 const EnumBomb uint8 = 9
 const FullBlock rune = '█' // deprecated
 
