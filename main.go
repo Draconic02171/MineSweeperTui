@@ -208,10 +208,12 @@ func main() {
 	IsRunning := true
 
 	for {
+
 		fmt.Printf("%s", Terminal.MoveTo(0, 0))
 		if IsRunning == false {
 			break
 		}
+
 		Field[OldPosition.Y][OldPosition.X].BackgroundColor = Terminal.Color{R: 0, G: 0, B: 0, Font: false}
 		Field[CursorPosition.Y][CursorPosition.X].BackgroundColor = Terminal.Color{R: 255, G: 255, B: 255, Font: false}
 
@@ -239,6 +241,14 @@ func main() {
 				CursorPosition.X++
 			case 13:
 				RevealBlocks(&Field, CursorPosition, 0)
+
+				if Field[CursorPosition.Y][CursorPosition.X].Value == 9 {
+					Field[CursorPosition.Y][CursorPosition.X].BackgroundColor = Terminal.Color{R: 255, G: 0, B: 0, Font: false}
+					Render(&Field)
+					time.Sleep(time.Second)
+					IsRunning = false
+				}
+
 			default:
 				break
 			}
