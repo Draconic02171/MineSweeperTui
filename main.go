@@ -12,37 +12,60 @@ import (
 
 const Height uint8 = 16
 const Width uint8 = 32
-const MaxBomb uint8 = 32
+const MaxBomb uint8 = 1
 const EnumBomb uint8 = 9
-const FullBlock rune = '█'
+const FullBlock rune = '█' // deprecated
 
 type Vec2 struct{ X, Y int8 }
 
 type Block struct {
-	ForgroundColor  Terminal.Color
-	BackgroundColor Terminal.Color
-	Selected        bool
-	Checked         bool
+	ForgroundColor  string
+	BackgroundColor string
+	Selected        bool //if this is true, it will reveal its value in the map
+	Checked         bool //for a reveal recursion flag
+	ShownCharacter  rune
 	Value           uint8
 }
 
 func PrintBlock(b Block) {
 	if b.Selected == true {
 		fmt.Printf(
-			"%s%s%d%s ",
-			b.ForgroundColor.ToString(),
-			b.BackgroundColor.ToString(),
-			b.Value,
+			"%s%s%c%s ",
+			b.ForgroundColor,
+			b.BackgroundColor,
+			b.ShownCharacter,
 			Terminal.Reset,
 		)
 		return
 	}
 	fmt.Printf(
 		"%s%s.%s ",
-		Terminal.Color{R: 150, G: 150, B: 150, Font: true}.ToString(),
-		b.BackgroundColor.ToString(),
+		Terminal.Color{R: 200, G: 200, B: 200, Font: true}.ToString(),
+		b.BackgroundColor,
 		Terminal.Reset,
 	)
+}
+
+func AssignColor(b *Block) {
+	var RedColor uint8 = ((255 / EnumBomb) * b.Value)
+	var GreenColor uint8 = 0
+	var BlueColor uint8 = 0
+
+	if b.Value != 0 {
+		GreenColor = 255 / (b.Value * b.Value * b.Value)
+	}
+
+	if b.Value != 0 {
+		BlueColor = 255 / b.Value
+	}
+
+	b.ForgroundColor = Terminal.Color{
+		R:    RedColor,
+		G:    GreenColor,
+		B:    BlueColor,
+		Font: true}.ToString()
+
+	b.BackgroundColor = ""
 }
 
 func Render(Field *[Height][Width]Block) {
@@ -98,7 +121,7 @@ func GenerateMap() [Height][Width]Block {
 				if X < 0 || X >= int8(Width) {
 					continue
 				}
-				if field[Y][X].Value == 9 {
+				if field[Y][X].Value == EnumBomb {
 					continue
 				}
 
@@ -110,29 +133,8 @@ func GenerateMap() [Height][Width]Block {
 	for Y := range int(Height) {
 		for X := range int(Width) {
 
-			var RedColor uint8 = ((255 / 9) * field[Y][X].Value)
-			var GreenColor uint8 = 0
-			var BlueColor uint8 = 0
-
-			if field[Y][X].Value != 0 {
-				GreenColor = 255 / (field[Y][X].Value * field[Y][X].Value * field[Y][X].Value)
-			}
-
-			if field[Y][X].Value != 0 {
-				BlueColor = 255 / field[Y][X].Value
-			}
-
-			field[Y][X].ForgroundColor = Terminal.Color{
-				R:    RedColor,
-				G:    GreenColor,
-				B:    BlueColor,
-				Font: true}
-
-			field[Y][X].BackgroundColor = Terminal.Color{
-				R:    0,
-				G:    0,
-				B:    0,
-				Font: false}
+			AssignColor(&field[Y][X])
+			field[Y][X].ShownCharacter = rune(field[Y][X].Value + uint8('0'))
 			field[Y][X].Selected = false
 		}
 	}
@@ -157,22 +159,28 @@ func RevealBlocks(Field *[Height][Width]Block, Position Vec2, Attempt uint32) {
 		}
 	}
 
+	CurrentBlock := &Field[Position.Y][Position.X]
+
 	{ // check if its already get checked or the value is non zero
-		if Field[Position.Y][Position.X].Value != 0 {
-			Field[Position.Y][Position.X].Selected = true
-			Field[Position.Y][Position.X].Checked = true
+		if CurrentBlock.Value != 0 {
+			CurrentBlock.Selected = true
+			CurrentBlock.Checked = true
 			return
 		}
-		if Field[Position.Y][Position.X].Checked == true {
+		if CurrentBlock.Checked == true {
 			return
 		}
-		if Field[Position.Y][Position.X].Selected == true {
-			return
+		if CurrentBlock.Selected == true {
+			if CurrentBlock.ShownCharacter != 'x' {
+				return
+			}
+			CurrentBlock.ShownCharacter = ' '
 		}
 	}
 
-	Field[Position.Y][Position.X].Selected = true
-	Field[Position.Y][Position.X].Checked = true
+	CurrentBlock.ShownCharacter = ' '
+	CurrentBlock.Selected = true
+	CurrentBlock.Checked = true
 
 	RevealBlocks(Field, Vec2{Position.X - 1, Position.Y}, Attempt)
 	RevealBlocks(Field, Vec2{Position.X + 1, Position.Y}, Attempt)
@@ -201,8 +209,11 @@ func main() {
 	fmt.Printf(Terminal.EnterAltScreen)
 	//////////////////////////////////////////////////////////
 
+	var FlagMap [Height][Width]bool //everything is false
+	FlagCount := 0
 	CursorPosition := Vec2{X: int8(Width / 2), Y: int8(Height / 2)}
 	Field := GenerateMap()
+
 	OldPosition := CursorPosition
 	IsChanged := true
 	IsRunning := true
@@ -214,11 +225,10 @@ func main() {
 			break
 		}
 
-		Field[OldPosition.Y][OldPosition.X].BackgroundColor = Terminal.Color{R: 0, G: 0, B: 0, Font: false}
-		Field[CursorPosition.Y][CursorPosition.X].BackgroundColor = Terminal.Color{R: 255, G: 255, B: 255, Font: false}
+		Field[OldPosition.Y][OldPosition.X].BackgroundColor = ""
+		Field[CursorPosition.Y][CursorPosition.X].BackgroundColor = Terminal.Color{R: 255, G: 255, B: 255, Font: false}.ToString()
 
 		if IsChanged == true {
-			CleanBlocks(&Field)
 			Render(&Field)
 			IsChanged = false
 		}
@@ -228,6 +238,10 @@ func main() {
 		select {
 		case key := <-InputChannel:
 			IsChanged = true
+
+			FlagBlock := &FlagMap[CursorPosition.Y][CursorPosition.X]
+			FieldBlock := &Field[CursorPosition.Y][CursorPosition.X]
+
 			switch key {
 			case 27:
 				IsRunning = false
@@ -239,11 +253,58 @@ func main() {
 				CursorPosition.X--
 			case 'd':
 				CursorPosition.X++
+			case 'e':
+				{
+
+					if FieldBlock.Selected == true {
+						break // if its already reveal then, you cant mark
+					}
+
+					if *FlagBlock == false {
+						*FlagBlock = true
+
+						FieldBlock.ShownCharacter = 'x'
+						FieldBlock.ForgroundColor = Terminal.Color{R: 0, G: 255, B: 0, Font: true}.ToString()
+
+					} else {
+
+						*FlagBlock = false
+						FieldBlock.ShownCharacter = rune(FieldBlock.Value + uint8('0'))
+						AssignColor(FieldBlock)
+
+					}
+					FieldBlock.Selected = *FlagBlock
+
+					if FieldBlock.Value == EnumBomb {
+
+						if *FlagBlock == true {
+							FlagCount++
+						} else {
+							FlagCount--
+						}
+
+					}
+
+					if FlagCount == int(MaxBomb) {
+
+						IsRunning = false
+
+						fmt.Printf("%s", Terminal.MoveTo(0, 0))
+						Render(&Field)
+
+						fmt.Println("You Win!")
+						time.Sleep(2 * time.Second)
+
+					}
+
+				}
 			case 13:
 				RevealBlocks(&Field, CursorPosition, 0)
 
-				if Field[CursorPosition.Y][CursorPosition.X].Value == 9 {
-					Field[CursorPosition.Y][CursorPosition.X].BackgroundColor = Terminal.Color{R: 255, G: 0, B: 0, Font: false}
+				if FieldBlock.Value == EnumBomb {
+
+					FieldBlock.BackgroundColor = Terminal.Color{R: 255, G: 0, B: 0, Font: false}.ToString()
+
 					Render(&Field)
 					time.Sleep(time.Second)
 					IsRunning = false
@@ -255,6 +316,10 @@ func main() {
 
 		default:
 			fmt.Print("")
+		}
+
+		if FlagCount < 0 {
+			FlagCount = 0
 		}
 
 		if CursorPosition.X < 0 {
